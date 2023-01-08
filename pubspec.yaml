@@ -1,0 +1,19 @@
+name: coin
+version: 0.1.0
+description: A cross-platform cryptocurrency toolkit with native secp256k1 support.
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  crypto: ^3.0.3
+  pointycastle: ^3.7.3
+  collection: ^1.17.1
+  ffi: ^2.1.0
+  wasm_interop: ^2.0.1
+  meta: ^1.9.0
+
+dev_dependencies:
+  ffigen: ^10.0.0
+  lints: ^3.0.0
+  test: ^1.24.0
