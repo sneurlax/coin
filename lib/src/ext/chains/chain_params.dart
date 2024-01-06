@@ -1,0 +1,40 @@
+import '../../chain/chain.dart';
+
+enum AddrType {
+  p2pkh,
+  p2sh,
+  p2wpkh,
+  p2wsh,
+  p2tr,
+}
+
+class ChainParams {
+  final Chain chain;
+  final String chainName;
+  final String ticker;
+  final String identifier;
+  final int bip44CoinType;
+  final List<AddrType> supportedAddrTypes;
+  final bool supportsSegwit;
+  final bool supportsTaproot;
+
+  /// BCH / BSV set this to modify sighash computation.
+  final bool usesForkId;
+
+  const ChainParams({
+    required this.chain,
+    required this.chainName,
+    required this.ticker,
+    required this.identifier,
+    required this.bip44CoinType,
+    required this.supportedAddrTypes,
+    this.supportsSegwit = true,
+    this.supportsTaproot = true,
+    this.usesForkId = false,
+  });
+
+  int get wifPrefix => chain.wifPrefix;
+  int get p2pkhPrefix => chain.p2pkhPrefix;
+  int get p2shPrefix => chain.p2shPrefix;
+  String? get bech32Hrp => chain.bech32Hrp;
+}
