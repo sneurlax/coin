@@ -1,16 +1,15 @@
+import '../../tx/inputs/tx_input.dart';
 import '../../tx/tx.dart';
 import '../../tx/tx_output.dart';
 import '../chains/chain_params.dart';
 import 'ordering.dart';
 import 'signing_callback.dart';
 import 'tx_assembler.dart';
+import '../forked_tx/forked_hasher.dart';
 
-/// Transaction assembler for chains that use SIGHASH_FORKID (BCH / BSV).
-///
-/// Extends [TxAssembler] with fork-id aware sighash computation.
+/// [TxAssembler] subclass for SIGHASH_FORKID chains (BCH / BSV).
 class ForkedTxAssembler extends TxAssembler {
-  /// The fork-id value to embed in the sighash type byte.
-  /// BCH uses 0x00, BSV uses 0x00 (fork-id is the upper 24 bits).
+  /// Fork-id value embedded in the upper 24 bits of the sighash type word.
   final int forkId;
 
   ForkedTxAssembler({
@@ -25,11 +24,59 @@ class ForkedTxAssembler extends TxAssembler {
 
   @override
   Tx build(SignerCallback signer) {
-    throw UnimplementedError('ForkedTxAssembler.build');
+    final rawInputs = inputs
+        .map((i) => RawInput(prevOut: i.outpoint, sequence: i.sequence))
+        .toList();
+
+    final tx = Tx(
+      version: version,
+      inputs: rawInputs,
+      outputs: List.of(outputs),
+      locktime: locktime,
+    );
+
+    final hasher = ForkedHasher(forkId: forkId);
+    for (var i = 0; i < inputs.length; i++) {
+      final meta = inputs[i];
+      final digest = hasher.hash(
+        tx,
+        i,
+        meta.hashType,
+        prevScript: meta.scriptPubKey,
+        amount: meta.value,
+      );
+      signer(tx, i, digest, meta.hashType);
+    }
+
+    return tx;
   }
 
   @override
-  Future<Tx> buildAsync(AsyncSignerCallback signer) {
-    throw UnimplementedError('ForkedTxAssembler.buildAsync');
+  Future<Tx> buildAsync(AsyncSignerCallback signer) async {
+    final rawInputs = inputs
+        .map((i) => RawInput(prevOut: i.outpoint, sequence: i.sequence))
+        .toList();
+
+    final tx = Tx(
+      version: version,
+      inputs: rawInputs,
+      outputs: List.of(outputs),
+      locktime: locktime,
+    );
+
+    final hasher = ForkedHasher(forkId: forkId);
+    for (var i = 0; i < inputs.length; i++) {
+      final meta = inputs[i];
+      final digest = hasher.hash(
+        tx,
+        i,
+        meta.hashType,
+        prevScript: meta.scriptPubKey,
+        amount: meta.value,
+      );
+      await signer(tx, i, digest, meta.hashType);
+    }
+
+    return tx;
   }
 }
