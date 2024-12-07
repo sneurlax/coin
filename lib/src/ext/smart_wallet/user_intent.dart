@@ -1,5 +1,11 @@
 import 'dart:typed_data';
 
+import '../../core/hex.dart';
+import '../../hash/digest.dart';
+import '../abi/sol_codec.dart';
+import '../abi/sol_types/address_type.dart';
+import '../abi/sol_types/bytes_type.dart';
+import '../abi/sol_types/uint_type.dart';
 import '../evm/evm_addr.dart';
 
 /// ERC-4337 UserOperation struct.
@@ -39,17 +45,63 @@ class UserIntent {
         paymasterAndData = paymasterAndData ?? Uint8List(0),
         signature = signature ?? Uint8List(0);
 
-  /// keccak256(abi.encode(packUserOp, entryPoint, chainId))
+  // keccak256(abi.encode(packed, entryPoint, chainId))
   Uint8List hash({required EvmAddr entryPoint, required BigInt chainId}) {
-    throw UnimplementedError('UserIntent.hash not yet implemented');
+    final packed = pack();
+    final packedHash = keccak256(packed);
+    final encoded = SolCodec.encodeParameters(
+      [SolFixedBytes(32), SolAddress(), SolUint(256)],
+      [packedHash, entryPoint.bytes, chainId],
+    );
+    return keccak256(encoded);
   }
 
   Uint8List pack() {
-    throw UnimplementedError('UserIntent.pack not yet implemented');
+    final initCodeHash = keccak256(initCode);
+    final callDataHash = keccak256(callData);
+    final paymasterAndDataHash = keccak256(paymasterAndData);
+    return SolCodec.encodeParameters(
+      [
+        SolAddress(),
+        SolUint(256),
+        SolFixedBytes(32),
+        SolFixedBytes(32),
+        SolUint(256),
+        SolUint(256),
+        SolUint(256),
+        SolUint(256),
+        SolUint(256),
+        SolFixedBytes(32),
+      ],
+      [
+        sender.bytes,
+        nonce,
+        initCodeHash,
+        callDataHash,
+        callGasLimit,
+        verificationGasLimit,
+        preVerificationGas,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+        paymasterAndDataHash,
+      ],
+    );
   }
 
   Map<String, String> toJson() {
-    throw UnimplementedError('UserIntent.toJson not yet implemented');
+    return {
+      'sender': '0x${sender.toHex()}',
+      'nonce': '0x${nonce.toRadixString(16)}',
+      'initCode': '0x${hexEncode(initCode)}',
+      'callData': '0x${hexEncode(callData)}',
+      'callGasLimit': '0x${callGasLimit.toRadixString(16)}',
+      'verificationGasLimit': '0x${verificationGasLimit.toRadixString(16)}',
+      'preVerificationGas': '0x${preVerificationGas.toRadixString(16)}',
+      'maxFeePerGas': '0x${maxFeePerGas.toRadixString(16)}',
+      'maxPriorityFeePerGas': '0x${maxPriorityFeePerGas.toRadixString(16)}',
+      'paymasterAndData': '0x${hexEncode(paymasterAndData)}',
+      'signature': '0x${hexEncode(signature)}',
+    };
   }
 
   UserIntent withSignature(Uint8List sig) {

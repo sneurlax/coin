@@ -1,5 +1,12 @@
 import 'dart:typed_data';
 
+import '../../core/bytes.dart';
+import '../../core/hex.dart';
+import '../abi/sol_codec.dart';
+import '../abi/sol_types/address_type.dart';
+import '../abi/sol_types/bytes_type.dart';
+import '../abi/sol_types/uint_type.dart';
+import '../abi/sol_types/array_type.dart';
 import '../evm/evm_addr.dart';
 import 'user_intent.dart';
 
@@ -11,7 +18,6 @@ abstract class DelegatedAccount {
   Future<bool> isDeployed();
   Future<BigInt> getNonce();
 
-  /// InitCode for first-time deployment via the EntryPoint.
   Uint8List buildInitCode();
 
   Uint8List encodeExecute(EvmAddr target, BigInt value, Uint8List data);
@@ -51,26 +57,37 @@ class SimpleDelegatedAccount implements DelegatedAccount {
 
   @override
   Future<bool> isDeployed() {
+    // Needs live RPC transport
     throw UnimplementedError(
-        'SimpleDelegatedAccount.isDeployed not yet implemented');
+        'SimpleDelegatedAccount.isDeployed: needs live RPC transport');
   }
 
   @override
   Future<BigInt> getNonce() {
+    // Needs live RPC transport
     throw UnimplementedError(
-        'SimpleDelegatedAccount.getNonce not yet implemented');
+        'SimpleDelegatedAccount.getNonce: needs live RPC transport');
   }
 
   @override
   Uint8List buildInitCode() {
-    throw UnimplementedError(
-        'SimpleDelegatedAccount.buildInitCode not yet implemented');
+    // createAccount(address,uint256) selector: 0x5fbfb9cf
+    final selector = hexDecode('5fbfb9cf');
+    final encoded = SolCodec.encodeParameters(
+      [SolAddress(), SolUint(256)],
+      [ownerAddress.bytes, BigInt.zero],
+    );
+    return concatBytes([factoryAddress.bytes, selector, encoded]);
   }
 
   @override
   Uint8List encodeExecute(EvmAddr target, BigInt value, Uint8List data) {
-    throw UnimplementedError(
-        'SimpleDelegatedAccount.encodeExecute not yet implemented');
+    // execute(address,uint256,bytes) selector: 0xb61d27f6
+    return SolCodec.encodeCall(
+      'execute(address,uint256,bytes)',
+      [SolAddress(), SolUint(256), SolBytes()],
+      [target.bytes, value, data],
+    );
   }
 
   @override
@@ -79,8 +96,19 @@ class SimpleDelegatedAccount implements DelegatedAccount {
     List<BigInt> values,
     List<Uint8List> datas,
   ) {
-    throw UnimplementedError(
-        'SimpleDelegatedAccount.encodeBatchExecute not yet implemented');
+    if (targets.length != values.length || values.length != datas.length) {
+      throw ArgumentError('targets, values, and datas must have equal length');
+    }
+    // executeBatch(address[],uint256[],bytes[]) selector: 0x18dfb3c7
+    return SolCodec.encodeCall(
+      'executeBatch(address[],uint256[],bytes[])',
+      [SolArray(SolAddress()), SolArray(SolUint(256)), SolArray(SolBytes())],
+      [
+        targets.map((t) => t.bytes).toList(),
+        values,
+        datas,
+      ],
+    );
   }
 
   @override
@@ -90,14 +118,40 @@ class SimpleDelegatedAccount implements DelegatedAccount {
     required Uint8List data,
     BigInt? maxFeePerGas,
     BigInt? maxPriorityFeePerGas,
-  }) {
-    throw UnimplementedError(
-        'SimpleDelegatedAccount.buildUserIntent not yet implemented');
+  }) async {
+    final callData = encodeExecute(target, value, data);
+
+    BigInt nonce;
+    Uint8List initCode;
+    try {
+      nonce = await getNonce();
+      initCode = Uint8List(0);
+    } on UnimplementedError {
+      nonce = BigInt.zero;
+      initCode = buildInitCode();
+    }
+
+    bool deployed;
+    try {
+      deployed = await isDeployed();
+    } on UnimplementedError {
+      deployed = false;
+    }
+
+    return UserIntent(
+      sender: address,
+      nonce: nonce,
+      initCode: deployed ? Uint8List(0) : initCode,
+      callData: callData,
+      maxFeePerGas: maxFeePerGas,
+      maxPriorityFeePerGas: maxPriorityFeePerGas,
+    );
   }
 
   @override
   Future<Uint8List> signUserOpHash(Uint8List hash) {
+    // Needs access to private key signing
     throw UnimplementedError(
-        'SimpleDelegatedAccount.signUserOpHash not yet implemented');
+        'SimpleDelegatedAccount.signUserOpHash: needs signer integration');
   }
 }
