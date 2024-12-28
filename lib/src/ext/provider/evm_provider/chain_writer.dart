@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
+import '../../../core/hex.dart';
 import '../../evm/evm_addr.dart';
 import '../../evm/evm_tx.dart';
 import '../../key_agent/key_agent.dart';
 import 'chain_reader.dart';
 
-/// Signing and state-mutating chain interactions.
 class ChainWriter {
   final Future<dynamic> Function(String method, List<dynamic>? params) _rpc;
   final ChainReader reader;
@@ -17,44 +17,137 @@ class ChainWriter {
     required this.signer,
   }) : _rpc = rpc;
 
-  /// Returns the transaction hash.
-  Future<String> sendRawTransaction(Uint8List signedTx) {
-    throw UnimplementedError(
-        'ChainWriter.sendRawTransaction not yet implemented');
+  Future<String> sendRawTransaction(Uint8List signedTx) async {
+    final hex = '0x${hexEncode(signedTx)}';
+    final result = await _rpc('eth_sendRawTransaction', [hex]) as String;
+    return result;
   }
 
-  /// Auto-populates nonce, gas, and chain ID if not specified.
-  Future<String> sendTransaction(Envelope envelope) {
-    throw UnimplementedError(
-        'ChainWriter.sendTransaction not yet implemented');
+  Future<String> sendTransaction(Envelope envelope) async {
+    final signed = await signTransaction(envelope);
+    return sendRawTransaction(signed);
   }
 
-  Future<Uint8List> signTransaction(Envelope envelope) {
-    throw UnimplementedError(
-        'ChainWriter.signTransaction not yet implemented');
+  Future<Uint8List> signTransaction(Envelope envelope) async {
+    var env = envelope;
+    final address = await signer.getAddress();
+
+    if (env.nonce == BigInt.zero) {
+      final nonce = await reader.getTransactionCount(address);
+      env = Envelope(
+        kind: env.kind,
+        to: env.to,
+        value: env.value,
+        data: env.data,
+        gasLimit: env.gasLimit,
+        nonce: nonce,
+        chainId: env.chainId,
+        gasPrice: env.gasPrice,
+        maxFeePerGas: env.maxFeePerGas,
+        maxPriorityFeePerGas: env.maxPriorityFeePerGas,
+        maxFeePerBlobGas: env.maxFeePerBlobGas,
+        blobVersionedHashes: env.blobVersionedHashes,
+        blobs: env.blobs,
+        accessList: env.accessList,
+        authorizationList: env.authorizationList,
+      );
+    }
+
+    if (env.chainId == BigInt.one) {
+      final chainId = await reader.getChainId();
+      env = Envelope(
+        kind: env.kind,
+        to: env.to,
+        value: env.value,
+        data: env.data,
+        gasLimit: env.gasLimit,
+        nonce: env.nonce,
+        chainId: chainId,
+        gasPrice: env.gasPrice,
+        maxFeePerGas: env.maxFeePerGas,
+        maxPriorityFeePerGas: env.maxPriorityFeePerGas,
+        maxFeePerBlobGas: env.maxFeePerBlobGas,
+        blobVersionedHashes: env.blobVersionedHashes,
+        blobs: env.blobs,
+        accessList: env.accessList,
+        authorizationList: env.authorizationList,
+      );
+    }
+
+    if (env.gasLimit == BigInt.from(21000) && env.data.isNotEmpty) {
+      final toHex = env.to != null ? '0x${hexEncode(env.to!)}' : null;
+      final estimate = await reader.estimateGas({
+        'from': address.toString(),
+        if (toHex != null) 'to': toHex,
+        'value': '0x${env.value.toRadixString(16)}',
+        'data': '0x${hexEncode(env.data)}',
+      });
+      env = Envelope(
+        kind: env.kind,
+        to: env.to,
+        value: env.value,
+        data: env.data,
+        gasLimit: estimate,
+        nonce: env.nonce,
+        chainId: env.chainId,
+        gasPrice: env.gasPrice,
+        maxFeePerGas: env.maxFeePerGas,
+        maxPriorityFeePerGas: env.maxPriorityFeePerGas,
+        maxFeePerBlobGas: env.maxFeePerBlobGas,
+        blobVersionedHashes: env.blobVersionedHashes,
+        blobs: env.blobs,
+        accessList: env.accessList,
+        authorizationList: env.authorizationList,
+      );
+    }
+
+    return signer.signTransaction(env);
   }
 
-  /// EIP-191 personal_sign.
   Future<Uint8List> signMessage(Uint8List message) {
-    throw UnimplementedError('ChainWriter.signMessage not yet implemented');
+    return signer.signMessage(message);
   }
 
-  /// EIP-712 typed data signing.
   Future<Uint8List> signTypedData(Map<String, dynamic> typedData) {
-    throw UnimplementedError(
-        'ChainWriter.signTypedData not yet implemented');
+    return signer.signTypedData(typedData);
   }
 
   Future<Map<String, dynamic>> waitForTransaction(
     String txHash, {
     int confirmations = 1,
     Duration timeout = const Duration(minutes: 5),
-  }) {
-    throw UnimplementedError(
-        'ChainWriter.waitForTransaction not yet implemented');
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final receipt = await reader.getTransactionReceipt(txHash);
+      if (receipt != null) {
+        if (confirmations <= 1) return receipt;
+        final receiptBlock = receipt['blockNumber'] as String?;
+        if (receiptBlock != null) {
+          final receiptNum =
+              BigInt.parse(receiptBlock.substring(2), radix: 16);
+          final currentBlock = await reader.getBlockNumber();
+          if (currentBlock - receiptNum + BigInt.one >=
+              BigInt.from(confirmations)) {
+            return receipt;
+          }
+        }
+      }
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+    throw TimeoutException(
+      'Transaction $txHash not confirmed within $timeout',
+    );
   }
 
   Future<EvmAddr> getAddress() {
-    throw UnimplementedError('ChainWriter.getAddress not yet implemented');
+    return signer.getAddress();
   }
+}
+
+class TimeoutException implements Exception {
+  final String message;
+  TimeoutException(this.message);
+  @override
+  String toString() => 'TimeoutException: $message';
 }
