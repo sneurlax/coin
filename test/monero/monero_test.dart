@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 import 'package:coin/coin.dart';
 import 'package:coin/src/monero/ed25519/ed25519_constants.dart';
 import 'package:coin/src/monero/ed25519/ed25519_math.dart';
+import 'package:coin/src/monero/encode/monero_base58.dart';
 
 // Ed25519 curve constants (G, l) from RFC 8032 §5.1:
 // https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
@@ -94,6 +95,97 @@ void main() {
       final doubleG = edScalarMult(BigInt.two, ed25519G);
       final addGG = edPointAdd(ed25519G, ed25519G);
       expect(doubleG, equals(addGG));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 5. Monero base58 tests
+  // ---------------------------------------------------------------------------
+  group('Monero base58', () {
+    test('encode/decode empty data', () {
+      final encoded = moneroBase58Encode(Uint8List(0));
+      expect(encoded, '');
+      final decoded = moneroBase58Decode('');
+      expect(decoded, equals(Uint8List(0)));
+    });
+
+    test('encode/decode round-trip for 1 byte', () {
+      final data = Uint8List.fromList([0x42]);
+      final encoded = moneroBase58Encode(data);
+      final decoded = moneroBase58Decode(encoded);
+      expect(decoded, equals(data));
+    });
+
+    test('encode/decode round-trip for 8 bytes (full block)', () {
+      final data = Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]);
+      final encoded = moneroBase58Encode(data);
+      expect(encoded.length, 11); // full block = 11 chars
+      final decoded = moneroBase58Decode(encoded);
+      expect(decoded, equals(data));
+    });
+
+    test('encode/decode round-trip for 32 bytes', () {
+      final data = Uint8List(32);
+      for (var i = 0; i < 32; i++) {
+        data[i] = i;
+      }
+      final encoded = moneroBase58Encode(data);
+      final decoded = moneroBase58Decode(encoded);
+      expect(decoded, equals(data));
+    });
+
+    test('encode/decode round-trip for 69 bytes (standard address payload)', () {
+      // Standard address raw data is 69 bytes (1 net byte + 32 spend + 32 view + 4 checksum)
+      final data = Uint8List(69);
+      for (var i = 0; i < 69; i++) {
+        data[i] = i & 0xff;
+      }
+      final encoded = moneroBase58Encode(data);
+      final decoded = moneroBase58Decode(encoded);
+      expect(decoded, equals(data));
+    });
+
+    test('encode/decode round-trip for 77 bytes (integrated address payload)', () {
+      final data = Uint8List(77);
+      for (var i = 0; i < 77; i++) {
+        data[i] = (i * 7 + 3) & 0xff;
+      }
+      final encoded = moneroBase58Encode(data);
+      final decoded = moneroBase58Decode(encoded);
+      expect(decoded, equals(data));
+    });
+
+    test('decode a known address and re-encode matches', () {
+      const addr =
+          '4B33mFPMq6mKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KQH4pNey';
+      final decoded = moneroBase58Decode(addr);
+      final reencoded = moneroBase58Encode(decoded);
+      expect(reencoded, addr);
+    });
+
+    test('all-zero bytes encode and decode correctly', () {
+      final data = Uint8List(16);
+      final encoded = moneroBase58Encode(data);
+      final decoded = moneroBase58Decode(encoded);
+      expect(decoded, equals(data));
+    });
+
+    test('all-0xFF bytes encode and decode correctly', () {
+      final data = Uint8List(16);
+      for (var i = 0; i < 16; i++) {
+        data[i] = 0xff;
+      }
+      final encoded = moneroBase58Encode(data);
+      final decoded = moneroBase58Decode(encoded);
+      expect(decoded, equals(data));
+    });
+
+    test('invalid base58 character throws FormatException', () {
+      // '0' is not in the base58 alphabet
+      expect(
+        () => moneroBase58Decode('00000000000'),
+        throwsA(isA<FormatException>()),
+      );
     });
   });
 }
