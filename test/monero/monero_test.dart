@@ -5,6 +5,7 @@ import 'package:coin/coin.dart';
 import 'package:coin/src/monero/ed25519/ed25519_constants.dart';
 import 'package:coin/src/monero/ed25519/ed25519_math.dart';
 import 'package:coin/src/monero/encode/monero_base58.dart';
+import 'package:coin/src/monero/keys/monero_keys.dart';
 
 // Ed25519 curve constants (G, l) from RFC 8032 §5.1:
 // https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
@@ -95,6 +96,104 @@ void main() {
       final doubleG = edScalarMult(BigInt.two, ed25519G);
       final addGG = edPointAdd(ed25519G, ed25519G);
       expect(doubleG, equals(addGG));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 2. Key derivation tests
+  // ---------------------------------------------------------------------------
+  group('Key derivation', () {
+    test('English seed: spend key -> view key derivation', () {
+      final spendKey = hexDecode(
+          'c0af65c0dd837e666b9d0dfed62745f4df35aed7ea619b2798a709f0fe545403');
+      final expectedViewKey =
+          '513ba91c538a5a9069e0094de90e927c0cd147fa10428ce3ac1afd49f63e3b01';
+
+      final keys = MoneroKeys.fromSpendKey(spendKey);
+      expect(hexEncode(keys.privateViewKey), expectedViewKey);
+    });
+
+    test('Chinese seed: entropy -> view key derivation', () {
+      final entropy = hexDecode(
+          'a5e4fff1706ef9212993a69f246f5c95ad6d84371692d63e9bb0ea112a58340d');
+      final expectedViewKey =
+          '1176c43ce541477ea2f3ef0b49b25112b084e26b8a843e1304ac4677b74cdf02';
+
+      final keys = MoneroKeys.fromSpendKey(entropy);
+      expect(hexEncode(keys.privateViewKey), expectedViewKey);
+    });
+
+    test('French seed: entropy -> view key derivation', () {
+      final entropy = hexDecode(
+          '2dd39ff1a4628a94b5c2ec3e42fb3dfe15c2b2f010154dc3b3de6791e805b904');
+      final expectedViewKey =
+          '6725b32230400a1032f31d622b44c3a227f88258939b14a7c72e00939e7bdf0e';
+
+      final keys = MoneroKeys.fromSpendKey(entropy);
+      expect(hexEncode(keys.privateViewKey), expectedViewKey);
+    });
+
+    test('Polyseed: spend key -> all key derivation', () {
+      final spendKey = hexDecode(
+          'c584b326f1a8472e210d80e4fc87271ffa371f94b95a0794eef80e851fb4e303');
+      final expectedViewKey =
+          '3b8ffd9a88e9cdbbd311629c38d696df07551bcea08e0df1942507db8f832007';
+      final expectedPubSpend =
+          '759ca40019178944aa2fe8062dfe61af1e3678be2ceed67fe83c34edde8492c9';
+      final expectedPubView =
+          '0d57d0165de6015305e5c1e2c54f75cc9a385348929980f1db140ac459e9958e';
+
+      final keys = MoneroKeys.fromSpendKey(spendKey);
+      expect(hexEncode(keys.privateViewKey), expectedViewKey);
+      expect(hexEncode(keys.publicSpendKey), expectedPubSpend);
+      expect(hexEncode(keys.publicViewKey), expectedPubView);
+    });
+
+    test('public key derivation: private * G produces correct public key', () {
+      final spendKey = hexDecode(
+          'c584b326f1a8472e210d80e4fc87271ffa371f94b95a0794eef80e851fb4e303');
+      final keys = MoneroKeys.fromSpendKey(spendKey);
+
+      // Verify by manually computing private spend key * G
+      final spendScalar = edBytesToBigInt(keys.privateSpendKey);
+      final pubPoint = edScalarMult(spendScalar, ed25519G);
+      final pubBytes = edPointToBytes(pubPoint);
+      expect(pubBytes, equals(keys.publicSpendKey));
+    });
+
+    test('generated keys have valid scalars (< l)', () {
+      final keys = MoneroKeys.generate();
+      final spendScalar = edBytesToBigInt(keys.privateSpendKey);
+      final viewScalar = edBytesToBigInt(keys.privateViewKey);
+      expect(spendScalar > BigInt.zero, isTrue);
+      expect(spendScalar < ed25519L, isTrue);
+      expect(viewScalar > BigInt.zero, isTrue);
+      expect(viewScalar < ed25519L, isTrue);
+    });
+
+    test('public keys are valid curve points', () {
+      final keys = MoneroKeys.generate();
+      final spendPoint = edBytesToPoint(keys.publicSpendKey);
+      final viewPoint = edBytesToPoint(keys.publicViewKey);
+      expect(edIsOnCurve(spendPoint), isTrue);
+      expect(edIsOnCurve(viewPoint), isTrue);
+    });
+
+    test('invalid seed length throws', () {
+      expect(() => MoneroKeys.fromSeed(Uint8List(31)), throwsArgumentError);
+      expect(() => MoneroKeys.fromSeed(Uint8List(33)), throwsArgumentError);
+    });
+
+    test('invalid spend key length throws', () {
+      expect(
+          () => MoneroKeys.fromSpendKey(Uint8List(31)), throwsArgumentError);
+      expect(
+          () => MoneroKeys.fromSpendKey(Uint8List(33)), throwsArgumentError);
+    });
+
+    test('zero spend key throws', () {
+      expect(
+          () => MoneroKeys.fromSpendKey(Uint8List(32)), throwsArgumentError);
     });
   });
 
