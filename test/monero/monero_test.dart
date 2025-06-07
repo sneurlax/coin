@@ -6,6 +6,8 @@ import 'package:coin/src/monero/ed25519/ed25519_constants.dart';
 import 'package:coin/src/monero/ed25519/ed25519_math.dart';
 import 'package:coin/src/monero/encode/monero_base58.dart';
 import 'package:coin/src/monero/keys/monero_keys.dart';
+import 'package:coin/src/monero/keys/monero_subaddress.dart';
+import 'package:coin/src/monero/addr/monero_addr.dart';
 
 // Ed25519 curve constants (G, l) from RFC 8032 §5.1:
 // https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
@@ -194,6 +196,238 @@ void main() {
     test('zero spend key throws', () {
       expect(
           () => MoneroKeys.fromSpendKey(Uint8List(32)), throwsArgumentError);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 3. Address encoding/decoding tests
+  // ---------------------------------------------------------------------------
+  group('Address encoding/decoding', () {
+    // Test vector keys
+    final spendPubKey = hexDecode(
+        'f8631661f6ab4e6fda310c797330d86e23a682f20d5bc8cc27b18051191f16d7');
+    final viewPubKey = hexDecode(
+        '4a1535063ad1fee2dabbf909d4fd9a873e29541b401f0944754e17c9a41820ce');
+
+    const expectedStandardAddr =
+        '4B33mFPMq6mKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KQH4pNey';
+
+    test('encode standard address from known keys', () {
+      final addr = MoneroStandardAddr(spendPubKey, viewPubKey);
+      final encoded = addr.encodeMainnet();
+      expect(encoded, expectedStandardAddr);
+    });
+
+    test('decode known standard address and verify keys', () {
+      final addr = MoneroAddr.mainnet(expectedStandardAddr);
+      expect(addr, isA<MoneroStandardAddr>());
+      expect(addr.addrType, MoneroAddrType.standard);
+      expect(hexEncode(addr.publicSpendKey),
+          'f8631661f6ab4e6fda310c797330d86e23a682f20d5bc8cc27b18051191f16d7');
+      expect(hexEncode(addr.publicViewKey),
+          '4a1535063ad1fee2dabbf909d4fd9a873e29541b401f0944754e17c9a41820ce');
+    });
+
+    test('encode integrated address with payment ID', () {
+      final paymentId = hexDecode('b8963a57855cf73f');
+      final addr =
+          MoneroIntegratedAddr(spendPubKey, viewPubKey, paymentId);
+      final encoded = addr.encodeMainnet();
+
+      const expectedIntegratedAddr =
+          '4Ljin4CrSNHKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KbaTH6MnpXSn88oBX35';
+      expect(encoded, expectedIntegratedAddr);
+    });
+
+    test('decode integrated address and verify keys and payment ID', () {
+      const integratedAddr =
+          '4Ljin4CrSNHKi7Eiyd5XuyKRVMGVZz1Rqb9ZTyGApXW5d1aT7UBDZ89ewmnWFkzJ5wPd2SFbn313vCT8a4E2Qf4KbaTH6MnpXSn88oBX35';
+      final addr = MoneroAddr.mainnet(integratedAddr);
+      expect(addr, isA<MoneroIntegratedAddr>());
+      expect(addr.addrType, MoneroAddrType.integrated);
+      expect(hexEncode(addr.publicSpendKey),
+          'f8631661f6ab4e6fda310c797330d86e23a682f20d5bc8cc27b18051191f16d7');
+      expect(hexEncode(addr.publicViewKey),
+          '4a1535063ad1fee2dabbf909d4fd9a873e29541b401f0944754e17c9a41820ce');
+      expect(hexEncode((addr as MoneroIntegratedAddr).paymentId),
+          'b8963a57855cf73f');
+    });
+
+    test('encode subaddress from known keys', () {
+      final subSpendKey = hexDecode(
+          'fe358188b528335ad1cfdc24a22a23988d742c882b6f19a602892eaab3c1b62b');
+      final subViewKey = hexDecode(
+          '9bc2b464de90d058468522098d5610c5019c45fd1711a9517db1eea7794f5470');
+      final addr = MoneroSubaddr(subSpendKey, subViewKey);
+      final encoded = addr.encodeMainnet();
+
+      const expectedSubaddr =
+          '8C5zHM5ud8nGC4hC2ULiBLSWx9infi8JUUmWEat4fcTf8J4H38iWYVdFmPCA9UmfLTZxD43RsyKnGEdZkoGij6csDeUnbEB';
+      expect(encoded, expectedSubaddr);
+    });
+
+    test('decode subaddress and verify keys', () {
+      const subAddr =
+          '8C5zHM5ud8nGC4hC2ULiBLSWx9infi8JUUmWEat4fcTf8J4H38iWYVdFmPCA9UmfLTZxD43RsyKnGEdZkoGij6csDeUnbEB';
+      final addr = MoneroAddr.mainnet(subAddr);
+      expect(addr, isA<MoneroSubaddr>());
+      expect(addr.addrType, MoneroAddrType.subaddress);
+      expect(hexEncode(addr.publicSpendKey),
+          'fe358188b528335ad1cfdc24a22a23988d742c882b6f19a602892eaab3c1b62b');
+      expect(hexEncode(addr.publicViewKey),
+          '9bc2b464de90d058468522098d5610c5019c45fd1711a9517db1eea7794f5470');
+    });
+
+    test('round-trip: decode(encode(standard addr)) recovers original keys', () {
+      final addr = MoneroStandardAddr(spendPubKey, viewPubKey);
+      final encoded = addr.encodeMainnet();
+      final decoded = MoneroAddr.mainnet(encoded);
+      expect(decoded.publicSpendKey, equals(spendPubKey));
+      expect(decoded.publicViewKey, equals(viewPubKey));
+    });
+
+    test('round-trip: decode(encode(integrated addr)) recovers keys and payment ID', () {
+      final paymentId = hexDecode('b8963a57855cf73f');
+      final addr =
+          MoneroIntegratedAddr(spendPubKey, viewPubKey, paymentId);
+      final encoded = addr.encodeMainnet();
+      final decoded = MoneroAddr.mainnet(encoded) as MoneroIntegratedAddr;
+      expect(decoded.publicSpendKey, equals(spendPubKey));
+      expect(decoded.publicViewKey, equals(viewPubKey));
+      expect(decoded.paymentId, equals(paymentId));
+    });
+
+    test('round-trip: decode(encode(subaddr)) recovers original keys', () {
+      final subSpendKey = hexDecode(
+          'fe358188b528335ad1cfdc24a22a23988d742c882b6f19a602892eaab3c1b62b');
+      final subViewKey = hexDecode(
+          '9bc2b464de90d058468522098d5610c5019c45fd1711a9517db1eea7794f5470');
+      final addr = MoneroSubaddr(subSpendKey, subViewKey);
+      final encoded = addr.encodeMainnet();
+      final decoded = MoneroAddr.mainnet(encoded);
+      expect(decoded.publicSpendKey, equals(subSpendKey));
+      expect(decoded.publicViewKey, equals(subViewKey));
+    });
+
+    test('polyseed: mainnet standard address', () {
+      final spendKey = hexDecode(
+          'c584b326f1a8472e210d80e4fc87271ffa371f94b95a0794eef80e851fb4e303');
+      final keys = MoneroKeys.fromSpendKey(spendKey);
+      final addr =
+          MoneroStandardAddr(keys.publicSpendKey, keys.publicViewKey);
+      final encoded = addr.encodeMainnet();
+      expect(encoded,
+          '465cUW8wTMSCV8oVVh7CuWWHs7yeB1oxhNPrsEM5FKSqadTXmobLqsNEtRnyGsbN1rbDuBtWdtxtXhTJda1Lm9vcH2ZdrD1');
+    });
+
+    test('polyseed: stagenet standard address', () {
+      final spendKey = hexDecode(
+          'c584b326f1a8472e210d80e4fc87271ffa371f94b95a0794eef80e851fb4e303');
+      final keys = MoneroKeys.fromSpendKey(spendKey);
+      final addr =
+          MoneroStandardAddr(keys.publicSpendKey, keys.publicViewKey);
+      final encoded = addr.encodeStagenet();
+      expect(encoded,
+          '56HeZM3u6xYCV8oVVh7CuWWHs7yeB1oxhNPrsEM5FKSqadTXmobLqsNEtRnyGsbN1rbDuBtWdtxtXhTJda1Lm9vcH73iSWn');
+    });
+
+    test('decode with wrong network bytes throws', () {
+      // Standard mainnet address decoded with testnet bytes
+      expect(
+        () => MoneroAddr.testnet(expectedStandardAddr),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
+    test('invalid address string throws', () {
+      expect(
+        () => MoneroAddr.mainnet('notavalidmoneroaddress'),
+        throwsA(anything),
+      );
+    });
+
+    test('invalid key length in MoneroStandardAddr throws', () {
+      expect(
+        () => MoneroStandardAddr(Uint8List(31), viewPubKey),
+        throwsArgumentError,
+      );
+      expect(
+        () => MoneroStandardAddr(spendPubKey, Uint8List(33)),
+        throwsArgumentError,
+      );
+    });
+
+    test('invalid payment ID length throws', () {
+      expect(
+        () => MoneroIntegratedAddr(spendPubKey, viewPubKey, Uint8List(7)),
+        throwsArgumentError,
+      );
+      expect(
+        () => MoneroIntegratedAddr(spendPubKey, viewPubKey, Uint8List(9)),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 4. Subaddress derivation tests
+  // ---------------------------------------------------------------------------
+  group('Subaddress derivation', () {
+    late MoneroKeys keys;
+
+    setUp(() {
+      final spendKey = hexDecode(
+          'c584b326f1a8472e210d80e4fc87271ffa371f94b95a0794eef80e851fb4e303');
+      keys = MoneroKeys.fromSpendKey(spendKey);
+    });
+
+    test('subaddress(0,0) returns main keys', () {
+      final sub = MoneroSubaddress.derive(keys, 0, 0);
+      expect(sub.publicSpendKey, equals(keys.publicSpendKey));
+      expect(sub.publicViewKey, equals(keys.publicViewKey));
+      expect(sub.accountIndex, 0);
+      expect(sub.addressIndex, 0);
+    });
+
+    test('subaddress(0,1) on stagenet matches test vector', () {
+      final sub = MoneroSubaddress.derive(keys, 0, 1);
+      final addr = MoneroSubaddr(sub.publicSpendKey, sub.publicViewKey);
+      final encoded = addr.encodeStagenet();
+      expect(encoded,
+          '7BdZnJevfquGJ4DMR7E6UwAFVrpK1z1NYgd9RQi7YvH3SykuQRKtkNfbXfG4fPqkrGSeGhnCT79Gz1uL1KegPMbz3u6DKCJ');
+    });
+
+    test('subaddress(1,1) on stagenet matches test vector', () {
+      final sub = MoneroSubaddress.derive(keys, 1, 1);
+      final addr = MoneroSubaddr(sub.publicSpendKey, sub.publicViewKey);
+      final encoded = addr.encodeStagenet();
+      expect(encoded,
+          '7AjduMBq2obQFyWuEYYZ6GcmCPDmyFJUpPTNmxiD3bv34cPbi7JzExeUKiieQzdhWoDJKcdn6N11Rf4aW794fmDQVXF8seo');
+    });
+
+    test('subaddress keys are valid curve points', () {
+      final sub = MoneroSubaddress.derive(keys, 0, 1);
+      final spendPoint = edBytesToPoint(sub.publicSpendKey);
+      final viewPoint = edBytesToPoint(sub.publicViewKey);
+      expect(edIsOnCurve(spendPoint), isTrue);
+      expect(edIsOnCurve(viewPoint), isTrue);
+    });
+
+    test('different indices produce different subaddresses', () {
+      final sub01 = MoneroSubaddress.derive(keys, 0, 1);
+      final sub02 = MoneroSubaddress.derive(keys, 0, 2);
+      final sub10 = MoneroSubaddress.derive(keys, 1, 0);
+
+      expect(sub01.publicSpendKey, isNot(equals(sub02.publicSpendKey)));
+      expect(sub01.publicSpendKey, isNot(equals(sub10.publicSpendKey)));
+      expect(sub02.publicSpendKey, isNot(equals(sub10.publicSpendKey)));
+    });
+
+    test('subaddress derivation is deterministic', () {
+      final sub1 = MoneroSubaddress.derive(keys, 2, 5);
+      final sub2 = MoneroSubaddress.derive(keys, 2, 5);
+      expect(sub1.publicSpendKey, equals(sub2.publicSpendKey));
+      expect(sub1.publicViewKey, equals(sub2.publicViewKey));
     });
   });
 
