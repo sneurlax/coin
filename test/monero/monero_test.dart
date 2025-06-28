@@ -8,6 +8,9 @@ import 'package:coin/src/monero/encode/monero_base58.dart';
 import 'package:coin/src/monero/keys/monero_keys.dart';
 import 'package:coin/src/monero/keys/monero_subaddress.dart';
 import 'package:coin/src/monero/addr/monero_addr.dart';
+import 'package:coin/src/monero/tx/stealth_addr.dart';
+import 'package:coin/src/monero/tx/key_image.dart';
+import 'package:coin/src/monero/tx/ring_sig.dart';
 
 // Ed25519 curve constants (G, l) from RFC 8032 §5.1:
 // https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
@@ -519,6 +522,357 @@ void main() {
         () => moneroBase58Decode('00000000000'),
         throwsA(isA<FormatException>()),
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Stealth address tests
+  // ---------------------------------------------------------------------------
+  group('Stealth address', () {
+    late MoneroKeys senderKeys;
+    late MoneroKeys recipientKeys;
+
+    setUp(() {
+      senderKeys = MoneroKeys.generate();
+      recipientKeys = MoneroKeys.generate();
+    });
+
+    test('deriveOutputKey + isOurOutput returns true for correct keys', () {
+      final txSecretKey = senderKeys.privateSpendKey;
+      final outputIndex = 0;
+
+      final outputKey = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: recipientKeys.publicViewKey,
+        recipientSpendKey: recipientKeys.publicSpendKey,
+        outputIndex: outputIndex,
+      );
+
+      final txPubKey = StealthAddress.txPublicKey(txSecretKey);
+
+      final isOurs = StealthAddress.isOurOutput(
+        privateViewKey: recipientKeys.privateViewKey,
+        publicSpendKey: recipientKeys.publicSpendKey,
+        txPublicKey: txPubKey,
+        outputKey: outputKey,
+        outputIndex: outputIndex,
+      );
+
+      expect(isOurs, isTrue);
+    });
+
+    test('isOurOutput returns false for wrong recipient keys', () {
+      final txSecretKey = senderKeys.privateSpendKey;
+      final outputIndex = 0;
+
+      final outputKey = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: recipientKeys.publicViewKey,
+        recipientSpendKey: recipientKeys.publicSpendKey,
+        outputIndex: outputIndex,
+      );
+
+      final txPubKey = StealthAddress.txPublicKey(txSecretKey);
+
+      // Use a different wallet's keys to scan -- should not match
+      final wrongKeys = MoneroKeys.generate();
+
+      final isOurs = StealthAddress.isOurOutput(
+        privateViewKey: wrongKeys.privateViewKey,
+        publicSpendKey: wrongKeys.publicSpendKey,
+        txPublicKey: txPubKey,
+        outputKey: outputKey,
+        outputIndex: outputIndex,
+      );
+
+      expect(isOurs, isFalse);
+    });
+
+    test('isOurOutput returns false for wrong output index', () {
+      final txSecretKey = senderKeys.privateSpendKey;
+
+      final outputKey = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: recipientKeys.publicViewKey,
+        recipientSpendKey: recipientKeys.publicSpendKey,
+        outputIndex: 0,
+      );
+
+      final txPubKey = StealthAddress.txPublicKey(txSecretKey);
+
+      final isOurs = StealthAddress.isOurOutput(
+        privateViewKey: recipientKeys.privateViewKey,
+        publicSpendKey: recipientKeys.publicSpendKey,
+        txPublicKey: txPubKey,
+        outputKey: outputKey,
+        outputIndex: 1, // wrong index
+      );
+
+      expect(isOurs, isFalse);
+    });
+
+    test('deriveOutputPrivateKey: privKey * G = outputKey', () {
+      final txSecretKey = senderKeys.privateSpendKey;
+      final outputIndex = 0;
+
+      final outputKey = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: recipientKeys.publicViewKey,
+        recipientSpendKey: recipientKeys.publicSpendKey,
+        outputIndex: outputIndex,
+      );
+
+      final txPubKey = StealthAddress.txPublicKey(txSecretKey);
+
+      final outputPrivKey = StealthAddress.deriveOutputPrivateKey(
+        privateSpendKey: recipientKeys.privateSpendKey,
+        privateViewKey: recipientKeys.privateViewKey,
+        txPublicKey: txPubKey,
+        outputIndex: outputIndex,
+      );
+
+      // Verify: outputPrivKey * G == outputKey
+      final scalar = edBytesToBigInt(outputPrivKey) % ed25519L;
+      final computed = edPointToBytes(edScalarMult(scalar, ed25519G));
+      expect(computed, equals(outputKey));
+    });
+
+    test('output key is a valid curve point', () {
+      final txSecretKey = senderKeys.privateSpendKey;
+
+      final outputKey = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: recipientKeys.publicViewKey,
+        recipientSpendKey: recipientKeys.publicSpendKey,
+        outputIndex: 0,
+      );
+
+      final point = edBytesToPoint(outputKey);
+      expect(edIsOnCurve(point), isTrue);
+    });
+
+    test('different output indices produce different output keys', () {
+      final txSecretKey = senderKeys.privateSpendKey;
+
+      final key0 = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: recipientKeys.publicViewKey,
+        recipientSpendKey: recipientKeys.publicSpendKey,
+        outputIndex: 0,
+      );
+
+      final key1 = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: recipientKeys.publicViewKey,
+        recipientSpendKey: recipientKeys.publicSpendKey,
+        outputIndex: 1,
+      );
+
+      expect(key0, isNot(equals(key1)));
+    });
+
+    test('txPublicKey is valid curve point', () {
+      final txPubKey = StealthAddress.txPublicKey(senderKeys.privateSpendKey);
+      expect(txPubKey.length, 32);
+      final point = edBytesToPoint(txPubKey);
+      expect(edIsOnCurve(point), isTrue);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 7. Key image tests
+  // ---------------------------------------------------------------------------
+  group('Key image', () {
+    test('hashToPoint returns a point on the curve', () {
+      final data = Uint8List.fromList('test data for hash to point'.codeUnits);
+      final point = KeyImage.hashToPoint(data);
+      expect(point.isInfinity, isFalse);
+      expect(edIsOnCurve(point), isTrue);
+    });
+
+    test('hashToPoint with generator bytes returns on-curve point', () {
+      final gBytes = edPointToBytes(ed25519G);
+      final point = KeyImage.hashToPoint(gBytes);
+      expect(edIsOnCurve(point), isTrue);
+      expect(point.isInfinity, isFalse);
+    });
+
+    test('key images are deterministic (same inputs -> same output)', () {
+      final keys = MoneroKeys.generate();
+      final txSecretKey = MoneroKeys.generate().privateSpendKey;
+
+      final outputKey = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: keys.publicViewKey,
+        recipientSpendKey: keys.publicSpendKey,
+        outputIndex: 0,
+      );
+
+      final txPubKey = StealthAddress.txPublicKey(txSecretKey);
+
+      final outputPrivKey = StealthAddress.deriveOutputPrivateKey(
+        privateSpendKey: keys.privateSpendKey,
+        privateViewKey: keys.privateViewKey,
+        txPublicKey: txPubKey,
+        outputIndex: 0,
+      );
+
+      final image1 = KeyImage.compute(outputPrivKey, outputKey);
+      final image2 = KeyImage.compute(outputPrivKey, outputKey);
+      expect(image1, equals(image2));
+    });
+
+    test('key image is a valid curve point', () {
+      final keys = MoneroKeys.generate();
+      final txSecretKey = MoneroKeys.generate().privateSpendKey;
+
+      final outputKey = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey,
+        recipientViewKey: keys.publicViewKey,
+        recipientSpendKey: keys.publicSpendKey,
+        outputIndex: 0,
+      );
+
+      final txPubKey = StealthAddress.txPublicKey(txSecretKey);
+
+      final outputPrivKey = StealthAddress.deriveOutputPrivateKey(
+        privateSpendKey: keys.privateSpendKey,
+        privateViewKey: keys.privateViewKey,
+        txPublicKey: txPubKey,
+        outputIndex: 0,
+      );
+
+      final image = KeyImage.compute(outputPrivKey, outputKey);
+      expect(image.length, 32);
+      final point = edBytesToPoint(image);
+      expect(edIsOnCurve(point), isTrue);
+    });
+
+    test('different outputs produce different key images', () {
+      final keys = MoneroKeys.generate();
+      final txSecretKey1 = MoneroKeys.generate().privateSpendKey;
+      final txSecretKey2 = MoneroKeys.generate().privateSpendKey;
+
+      final outputKey1 = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey1,
+        recipientViewKey: keys.publicViewKey,
+        recipientSpendKey: keys.publicSpendKey,
+        outputIndex: 0,
+      );
+
+      final txPubKey1 = StealthAddress.txPublicKey(txSecretKey1);
+      final outputPrivKey1 = StealthAddress.deriveOutputPrivateKey(
+        privateSpendKey: keys.privateSpendKey,
+        privateViewKey: keys.privateViewKey,
+        txPublicKey: txPubKey1,
+        outputIndex: 0,
+      );
+
+      final outputKey2 = StealthAddress.deriveOutputKey(
+        txSecretKey: txSecretKey2,
+        recipientViewKey: keys.publicViewKey,
+        recipientSpendKey: keys.publicSpendKey,
+        outputIndex: 0,
+      );
+
+      final txPubKey2 = StealthAddress.txPublicKey(txSecretKey2);
+      final outputPrivKey2 = StealthAddress.deriveOutputPrivateKey(
+        privateSpendKey: keys.privateSpendKey,
+        privateViewKey: keys.privateViewKey,
+        txPublicKey: txPubKey2,
+        outputIndex: 0,
+      );
+
+      final image1 = KeyImage.compute(outputPrivKey1, outputKey1);
+      final image2 = KeyImage.compute(outputPrivKey2, outputKey2);
+      expect(image1, isNot(equals(image2)));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 8. Pedersen commitment tests
+  // ---------------------------------------------------------------------------
+  group('Pedersen commitment', () {
+    test('commit + verify passes for correct values', () {
+      final mask = hexDecode(
+          '0100000000000000000000000000000000000000000000000000000000000000');
+      final amount = BigInt.from(12345);
+
+      final commitment = PedersenCommitment.commit(amount, mask);
+      expect(commitment.length, 32);
+      expect(PedersenCommitment.verify(commitment, amount, mask), isTrue);
+    });
+
+    test('verify fails for wrong amount', () {
+      final mask = hexDecode(
+          '0200000000000000000000000000000000000000000000000000000000000000');
+      final amount = BigInt.from(12345);
+
+      final commitment = PedersenCommitment.commit(amount, mask);
+      expect(
+          PedersenCommitment.verify(commitment, BigInt.from(12346), mask),
+          isFalse);
+    });
+
+    test('verify fails for wrong mask', () {
+      final mask = hexDecode(
+          '0300000000000000000000000000000000000000000000000000000000000000');
+      final wrongMask = hexDecode(
+          '0400000000000000000000000000000000000000000000000000000000000000');
+      final amount = BigInt.from(99999);
+
+      final commitment = PedersenCommitment.commit(amount, mask);
+      expect(
+          PedersenCommitment.verify(commitment, amount, wrongMask), isFalse);
+    });
+
+    test('commitment is a valid curve point', () {
+      final mask = hexDecode(
+          '0500000000000000000000000000000000000000000000000000000000000000');
+      final amount = BigInt.from(42);
+
+      final commitment = PedersenCommitment.commit(amount, mask);
+      final point = edBytesToPoint(commitment);
+      expect(edIsOnCurve(point), isTrue);
+    });
+
+    test('zero amount with zero-ish mask produces valid commitment', () {
+      final mask = hexDecode(
+          '0100000000000000000000000000000000000000000000000000000000000000');
+      final amount = BigInt.zero;
+
+      final commitment = PedersenCommitment.commit(amount, mask);
+      expect(PedersenCommitment.verify(commitment, amount, mask), isTrue);
+    });
+
+    test('H generator point is on the curve', () {
+      final h = PedersenCommitment.h;
+      expect(edIsOnCurve(h), isTrue);
+      expect(h.isInfinity, isFalse);
+    });
+
+    test('H is different from G', () {
+      final h = PedersenCommitment.h;
+      expect(h, isNot(equals(ed25519G)));
+    });
+
+    test('different amounts produce different commitments with same mask', () {
+      final mask = hexDecode(
+          '0700000000000000000000000000000000000000000000000000000000000000');
+      final c1 = PedersenCommitment.commit(BigInt.from(100), mask);
+      final c2 = PedersenCommitment.commit(BigInt.from(200), mask);
+      expect(c1, isNot(equals(c2)));
+    });
+
+    test('different masks produce different commitments with same amount', () {
+      final mask1 = hexDecode(
+          '0800000000000000000000000000000000000000000000000000000000000000');
+      final mask2 = hexDecode(
+          '0900000000000000000000000000000000000000000000000000000000000000');
+      final amount = BigInt.from(555);
+      final c1 = PedersenCommitment.commit(amount, mask1);
+      final c2 = PedersenCommitment.commit(amount, mask2);
+      expect(c1, isNot(equals(c2)));
     });
   });
 }
