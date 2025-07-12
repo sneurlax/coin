@@ -18,6 +18,8 @@ class Bip44Paths {
   static const bitcoinCashTestnet = "m/44'/1'/0'";
   static const bitcoinSv = "m/44'/236'/0'";
   static const bitcoinSvTestnet = "m/44'/1'/0'";
+  static const monero = "m/44'/128'/0'";
+  static const moneroTestnet = "m/44'/1'/0'";
 
   // BIP-49 (SegWit-in-P2SH)
 

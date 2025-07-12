@@ -51,4 +51,8 @@ class Denomination {
   static const wei = Denomination(
     name: 'Ether', symbol: 'ETH', decimalPlaces: 18,
   );
+
+  static const piconero = Denomination(
+    name: 'Monero', symbol: 'XMR', decimalPlaces: 12,
+  );
 }

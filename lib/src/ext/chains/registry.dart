@@ -5,6 +5,7 @@ import 'dogecoin_params.dart';
 import 'dash_params.dart';
 import 'bitcoin_cash_params.dart';
 import 'bitcoin_sv_params.dart';
+import 'monero_params.dart';
 
 class ChainRegistry {
   ChainRegistry._();
@@ -23,6 +24,9 @@ class ChainRegistry {
     BitcoinCashParams.bitcoinCashTestnet,
     BitcoinSvParams.bitcoinSv,
     BitcoinSvParams.bitcoinSvTestnet,
+    MoneroParams.monero,
+    MoneroParams.moneroTestnet,
+    MoneroParams.moneroStagenet,
   ]);
 
   static ChainParams? byName(String name) {
