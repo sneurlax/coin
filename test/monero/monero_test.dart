@@ -2,15 +2,7 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:coin/coin.dart';
-import 'package:coin/src/monero/ed25519/ed25519_constants.dart';
-import 'package:coin/src/monero/ed25519/ed25519_math.dart';
-import 'package:coin/src/monero/encode/monero_base58.dart';
-import 'package:coin/src/monero/keys/monero_keys.dart';
-import 'package:coin/src/monero/keys/monero_subaddress.dart';
-import 'package:coin/src/monero/addr/monero_addr.dart';
-import 'package:coin/src/monero/tx/stealth_addr.dart';
-import 'package:coin/src/monero/tx/key_image.dart';
-import 'package:coin/src/monero/tx/ring_sig.dart';
+import 'package:coin/coin_monero.dart';
 
 // Ed25519 curve constants (G, l) from RFC 8032 §5.1:
 // https://datatracker.ietf.org/doc/html/rfc8032#section-5.1
@@ -31,9 +23,6 @@ void main() {
     await initCoin();
   });
 
-  // ---------------------------------------------------------------------------
-  // 1. Ed25519 math tests
-  // ---------------------------------------------------------------------------
   group('Ed25519 math', () {
     test('generator point G is on the curve', () {
       expect(edIsOnCurve(ed25519G), isTrue);
@@ -76,8 +65,6 @@ void main() {
     });
 
     test('edIsOnCurve returns false for invalid points', () {
-      // A point with arbitrary coordinates should almost certainly not be on
-      // the Ed25519 curve.
       final invalid = EdPoint(BigInt.from(42), BigInt.from(99));
       expect(edIsOnCurve(invalid), isFalse);
     });
@@ -87,7 +74,6 @@ void main() {
     });
 
     test('scalar reduce produces value less than l', () {
-      // 64-byte input (like a hash)
       final bigBytes = Uint8List(64);
       for (var i = 0; i < 64; i++) {
         bigBytes[i] = 0xff;
@@ -104,9 +90,6 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 2. Key derivation tests
-  // ---------------------------------------------------------------------------
   group('Key derivation', () {
     test('English seed: spend key -> view key derivation', () {
       final spendKey = hexDecode(
@@ -159,7 +142,6 @@ void main() {
           'c584b326f1a8472e210d80e4fc87271ffa371f94b95a0794eef80e851fb4e303');
       final keys = MoneroKeys.fromSpendKey(spendKey);
 
-      // Verify by manually computing private spend key * G
       final spendScalar = edBytesToBigInt(keys.privateSpendKey);
       final pubPoint = edScalarMult(spendScalar, ed25519G);
       final pubBytes = edPointToBytes(pubPoint);
@@ -202,11 +184,7 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 3. Address encoding/decoding tests
-  // ---------------------------------------------------------------------------
   group('Address encoding/decoding', () {
-    // Test vector keys
     final spendPubKey = hexDecode(
         'f8631661f6ab4e6fda310c797330d86e23a682f20d5bc8cc27b18051191f16d7');
     final viewPubKey = hexDecode(
@@ -335,7 +313,6 @@ void main() {
     });
 
     test('decode with wrong network bytes throws', () {
-      // Standard mainnet address decoded with testnet bytes
       expect(
         () => MoneroAddr.testnet(expectedStandardAddr),
         throwsA(isA<FormatException>()),
@@ -372,9 +349,6 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 4. Subaddress derivation tests
-  // ---------------------------------------------------------------------------
   group('Subaddress derivation', () {
     late MoneroKeys keys;
 
@@ -434,9 +408,6 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 5. Monero base58 tests
-  // ---------------------------------------------------------------------------
   group('Monero base58', () {
     test('encode/decode empty data', () {
       final encoded = moneroBase58Encode(Uint8List(0));
@@ -471,7 +442,6 @@ void main() {
     });
 
     test('encode/decode round-trip for 69 bytes (standard address payload)', () {
-      // Standard address raw data is 69 bytes (1 net byte + 32 spend + 32 view + 4 checksum)
       final data = Uint8List(69);
       for (var i = 0; i < 69; i++) {
         data[i] = i & 0xff;
@@ -517,7 +487,6 @@ void main() {
     });
 
     test('invalid base58 character throws FormatException', () {
-      // '0' is not in the base58 alphabet
       expect(
         () => moneroBase58Decode('00000000000'),
         throwsA(isA<FormatException>()),
@@ -525,9 +494,6 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 6. Stealth address tests
-  // ---------------------------------------------------------------------------
   group('Stealth address', () {
     late MoneroKeys senderKeys;
     late MoneroKeys recipientKeys;
@@ -574,7 +540,6 @@ void main() {
 
       final txPubKey = StealthAddress.txPublicKey(txSecretKey);
 
-      // Use a different wallet's keys to scan -- should not match
       final wrongKeys = MoneroKeys.generate();
 
       final isOurs = StealthAddress.isOurOutput(
@@ -631,7 +596,6 @@ void main() {
         outputIndex: outputIndex,
       );
 
-      // Verify: outputPrivKey * G == outputKey
       final scalar = edBytesToBigInt(outputPrivKey) % ed25519L;
       final computed = edPointToBytes(edScalarMult(scalar, ed25519G));
       expect(computed, equals(outputKey));
@@ -679,9 +643,6 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 7. Key image tests
-  // ---------------------------------------------------------------------------
   group('Key image', () {
     test('hashToPoint returns a point on the curve', () {
       final data = Uint8List.fromList('test data for hash to point'.codeUnits);
@@ -789,9 +750,6 @@ void main() {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // 8. Pedersen commitment tests
-  // ---------------------------------------------------------------------------
   group('Pedersen commitment', () {
     test('commit + verify passes for correct values', () {
       final mask = hexDecode(
