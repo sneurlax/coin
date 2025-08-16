@@ -10,6 +10,7 @@ export 'src/ext/chains/dogecoin_params.dart';
 export 'src/ext/chains/dash_params.dart';
 export 'src/ext/chains/bitcoin_cash_params.dart';
 export 'src/ext/chains/bitcoin_sv_params.dart';
+export 'src/ext/chains/particl_params.dart';
 export 'src/ext/chains/bip44_paths.dart';
 export 'src/ext/chains/registry.dart';
 

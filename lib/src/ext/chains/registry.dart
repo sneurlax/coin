@@ -6,6 +6,7 @@ import 'dash_params.dart';
 import 'bitcoin_cash_params.dart';
 import 'bitcoin_sv_params.dart';
 import 'monero_params.dart';
+import 'particl_params.dart';
 
 class ChainRegistry {
   ChainRegistry._();
@@ -27,6 +28,8 @@ class ChainRegistry {
     MoneroParams.monero,
     MoneroParams.moneroTestnet,
     MoneroParams.moneroStagenet,
+    ParticlParams.particl,
+    ParticlParams.particlTestnet,
   ]);
 
   static ChainParams? byName(String name) {
