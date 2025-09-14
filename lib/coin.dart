@@ -53,6 +53,7 @@ export 'src/script/lockings/multisig.dart';
 export 'src/tx/outpoint.dart';
 export 'src/tx/tx_output.dart';
 export 'src/tx/tx.dart';
+export 'src/tx/ext_tx.dart';
 export 'src/tx/funding.dart';
 export 'src/tx/inputs/tx_input.dart';
 export 'src/tx/inputs/input_sig.dart';
