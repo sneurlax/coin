@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import '../chain/chain.dart';
+import '../script/locking.dart';
 import 'legacy_addr.dart';
 import 'segwit_addr.dart';
 import 'taproot_addr.dart';
@@ -7,6 +8,8 @@ import 'taproot_addr.dart';
 abstract class Addr {
   String encode(Chain chain);
   Uint8List get hash;
+  Locking toLocking();
+  Uint8List get scriptPubKey => toLocking().compiled;
 
   factory Addr.fromString(String address, Chain chain) {
     // Try bech32m (taproot)

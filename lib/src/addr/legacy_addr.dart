@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 import '../chain/chain.dart';
 import '../crypto/vault_keeper.dart';
+import '../script/locking.dart';
+import '../script/lockings/pay_to_pubkey_hash.dart';
+import '../script/lockings/pay_to_script_hash.dart';
 import 'addr.dart';
 
 abstract class LegacyAddr implements Addr {
@@ -24,6 +27,12 @@ class P2pkhAddr implements LegacyAddr {
   }
 
   @override
+  Locking toLocking() => PayToPubKeyHash(hash);
+
+  @override
+  Uint8List get scriptPubKey => toLocking().compiled;
+
+  @override
   String encode(Chain chain) {
     final payload = Uint8List(21);
     payload[0] = chain.p2pkhPrefix;
@@ -39,6 +48,12 @@ class P2shAddr implements LegacyAddr {
   P2shAddr(this.hash) {
     if (hash.length != 20) throw ArgumentError('P2SH hash must be 20 bytes');
   }
+
+  @override
+  Locking toLocking() => PayToScriptHash(hash);
+
+  @override
+  Uint8List get scriptPubKey => toLocking().compiled;
 
   @override
   String encode(Chain chain) {

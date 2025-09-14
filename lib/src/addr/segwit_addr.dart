@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 import '../chain/chain.dart';
 import '../crypto/vault_keeper.dart';
+import '../script/locking.dart';
+import '../script/lockings/pay_to_witness_pubkey.dart';
+import '../script/lockings/pay_to_witness_script.dart';
 import 'addr.dart';
 
 abstract class SegwitAddr implements Addr {
@@ -23,6 +26,12 @@ class P2wpkhAddr implements SegwitAddr {
   }
 
   @override
+  Locking toLocking() => PayToWitnessPubKey(hash);
+
+  @override
+  Uint8List get scriptPubKey => toLocking().compiled;
+
+  @override
   String encode(Chain chain) =>
       VaultKeeper.vault.codec.bech32Encode(chain.bech32Hrp!, hash, version: 0);
 }
@@ -34,6 +43,12 @@ class P2wshAddr implements SegwitAddr {
   P2wshAddr(this.hash) {
     if (hash.length != 32) throw ArgumentError('P2WSH hash must be 32 bytes');
   }
+
+  @override
+  Locking toLocking() => PayToWitnessScript(hash);
+
+  @override
+  Uint8List get scriptPubKey => toLocking().compiled;
 
   @override
   String encode(Chain chain) =>
