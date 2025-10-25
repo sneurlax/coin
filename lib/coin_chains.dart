@@ -52,3 +52,6 @@ export 'src/ext/provider/utxo_provider/electrum_link.dart';
 export 'src/ext/provider/utxo_provider/explorer_link.dart';
 export 'src/ext/provider/utxo_provider/utxo_methods.dart';
 export 'src/ext/provider/utxo_provider/utxo_models.dart';
+
+// BIP47
+export 'src/ext/bip47/bip47.dart';
