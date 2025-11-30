@@ -11,6 +11,7 @@ export 'src/core/random.dart';
 
 // Crypto engine
 export 'src/crypto/gates/curve_gate.dart';
+export 'src/crypto/gates/ed25519_gate.dart';
 export 'src/crypto/gates/digest_gate.dart';
 export 'src/crypto/gates/key_forge.dart';
 export 'src/crypto/gates/codec_gate.dart';
