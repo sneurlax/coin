@@ -646,14 +646,18 @@ void main() {
   group('Key image', () {
     test('hashToPoint returns a point on the curve', () {
       final data = Uint8List.fromList('test data for hash to point'.codeUnits);
-      final point = KeyImage.hashToPoint(data);
+      final pointBytes = KeyImage.hashToPoint(data);
+      expect(pointBytes.length, 32);
+      final point = edBytesToPoint(pointBytes);
       expect(point.isInfinity, isFalse);
       expect(edIsOnCurve(point), isTrue);
     });
 
     test('hashToPoint with generator bytes returns on-curve point', () {
       final gBytes = edPointToBytes(ed25519G);
-      final point = KeyImage.hashToPoint(gBytes);
+      final pointBytes = KeyImage.hashToPoint(gBytes);
+      expect(pointBytes.length, 32);
+      final point = edBytesToPoint(pointBytes);
       expect(edIsOnCurve(point), isTrue);
       expect(point.isInfinity, isFalse);
     });
@@ -804,14 +808,16 @@ void main() {
     });
 
     test('H generator point is on the curve', () {
-      final h = PedersenCommitment.h;
+      final hBytes = PedersenCommitment.h;
+      final h = edBytesToPoint(hBytes);
       expect(edIsOnCurve(h), isTrue);
       expect(h.isInfinity, isFalse);
     });
 
     test('H is different from G', () {
-      final h = PedersenCommitment.h;
-      expect(h, isNot(equals(ed25519G)));
+      final hBytes = PedersenCommitment.h;
+      final gBytes = edPointToBytes(ed25519G);
+      expect(hBytes, isNot(equals(gBytes)));
     });
 
     test('different amounts produce different commitments with same mask', () {

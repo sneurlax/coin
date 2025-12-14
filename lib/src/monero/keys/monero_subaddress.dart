@@ -2,8 +2,6 @@ import 'dart:typed_data';
 
 import '../../core/bytes.dart';
 import '../../crypto/vault_keeper.dart';
-import '../ed25519/ed25519_constants.dart';
-import '../ed25519/ed25519_math.dart';
 import 'monero_keys.dart';
 
 /// Subaddress (i, j): m = Hs("SubAddr\0" || viewKey || i || j),
@@ -45,17 +43,14 @@ class MoneroSubaddress {
 
     final hashInput = concatBytes([prefix, keys.privateViewKey, indexBytes]);
 
+    final ed = VaultKeeper.vault.ed25519;
     final hash = VaultKeeper.vault.digest.keccak256(hashInput);
-    final m = edScalarReduce(hash);
+    final mBytes = ed.scalarReduce(hash);
 
-    final mG = edScalarMult(m, ed25519G);
-    final mainSpendPoint = edBytesToPoint(keys.publicSpendKey);
-    final subSpendPoint = edPointAdd(mG, mainSpendPoint);
-    final subSpendBytes = edPointToBytes(subSpendPoint);
+    final mG = ed.scalarMultBase(mBytes);
+    final subSpendBytes = ed.pointAdd(mG, keys.publicSpendKey);
 
-    final viewScalar = edBytesToBigInt(keys.privateViewKey);
-    final subViewPoint = edScalarMult(viewScalar, subSpendPoint);
-    final subViewBytes = edPointToBytes(subViewPoint);
+    final subViewBytes = ed.scalarMult(keys.privateViewKey, subSpendBytes);
 
     return MoneroSubaddress._(
       publicSpendKey: subSpendBytes,

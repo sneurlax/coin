@@ -3,8 +3,6 @@ import 'dart:typed_data';
 import '../../core/hex.dart';
 import '../../core/random.dart';
 import '../../crypto/vault_keeper.dart';
-import '../ed25519/ed25519_constants.dart';
-import '../ed25519/ed25519_math.dart';
 
 /// Spend and view key pairs on Ed25519. From a seed: spendPriv = reduce(seed),
 /// viewPriv = reduce(keccak(spendPriv)), public keys = scalar * G.
@@ -25,8 +23,7 @@ class MoneroKeys {
     if (seed.length != 32) {
       throw ArgumentError('Seed must be 32 bytes, got ${seed.length}');
     }
-    final spendScalar = edScalarReduce(seed);
-    final spendKeyBytes = edBigIntToBytes(spendScalar, 32);
+    final spendKeyBytes = VaultKeeper.vault.ed25519.scalarReduce(seed);
     return MoneroKeys.fromSpendKey(spendKeyBytes);
   }
 
@@ -37,21 +34,29 @@ class MoneroKeys {
     }
 
     final spendBytes = Uint8List.fromList(privateSpendKey);
-    final spendScalar = edBytesToBigInt(spendBytes);
 
-    if (spendScalar == BigInt.zero || spendScalar >= ed25519L) {
+    // Validate: must be a reduced non-zero scalar.
+    final reduced = VaultKeeper.vault.ed25519.scalarMod(spendBytes);
+    final isZero = reduced.every((b) => b == 0);
+    // Check scalar == reduced (already in canonical form).
+    var isReduced = true;
+    for (var i = 0; i < 32; i++) {
+      if (spendBytes[i] != reduced[i]) {
+        isReduced = false;
+        break;
+      }
+    }
+    if (isZero || !isReduced) {
       throw ArgumentError('Private spend key is not a valid Ed25519 scalar');
     }
 
-    final pubSpendPoint = edScalarMult(spendScalar, ed25519G);
-    final pubSpendBytes = edPointToBytes(pubSpendPoint);
+    final ed = VaultKeeper.vault.ed25519;
+    final pubSpendBytes = ed.scalarMultBase(spendBytes);
 
     final viewHash = VaultKeeper.vault.digest.keccak256(spendBytes);
-    final viewScalar = edScalarReduce(viewHash);
-    final viewKeyBytes = edBigIntToBytes(viewScalar, 32);
+    final viewKeyBytes = ed.scalarReduce(viewHash);
 
-    final pubViewPoint = edScalarMult(viewScalar, ed25519G);
-    final pubViewBytes = edPointToBytes(pubViewPoint);
+    final pubViewBytes = ed.scalarMultBase(viewKeyBytes);
 
     return MoneroKeys._(
       privateSpendKey: spendBytes,

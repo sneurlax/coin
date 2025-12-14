@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
-import '../ed25519/ed25519_constants.dart';
-import '../ed25519/ed25519_math.dart';
+import '../../crypto/vault_keeper.dart';
 import 'key_image.dart';
 
 class OutputReference {
@@ -55,15 +54,25 @@ class MoneroTxOutput {
 class PedersenCommitment {
   PedersenCommitment._();
 
-  static EdPoint? _hCache;
-  static EdPoint get h => _hCache ??= _computeH();
+  static Uint8List? _hCache;
+
+  /// The alternate generator H = hashToPoint(G). Public for testing.
+  static Uint8List get h => _hCache ??= _computeH();
 
   static Uint8List commit(BigInt amount, Uint8List mask) {
-    final maskScalar = edBytesToBigInt(mask) % ed25519L;
-    final amountH = edScalarMult(amount % ed25519L, h);
-    final maskG = edScalarMult(maskScalar, ed25519G);
-    final c = edPointAdd(amountH, maskG);
-    return edPointToBytes(c);
+    final ed = VaultKeeper.vault.ed25519;
+
+    // Encode amount as a 32-byte LE scalar.
+    final amountBytes = Uint8List(32);
+    var a = amount;
+    for (var i = 0; i < 32 && a > BigInt.zero; i++) {
+      amountBytes[i] = (a & BigInt.from(0xFF)).toInt();
+      a >>= 8;
+    }
+
+    final amountH = ed.scalarMult(amountBytes, h);
+    final maskG = ed.scalarMultBase(mask);
+    return ed.pointAdd(amountH, maskG);
   }
 
   static bool verify(Uint8List commitment, BigInt amount, Uint8List mask) {
@@ -76,8 +85,15 @@ class PedersenCommitment {
     return diff == 0;
   }
 
-  static EdPoint _computeH() {
-    final gBytes = edPointToBytes(ed25519G);
+  static Uint8List _computeH() {
+    final ed = VaultKeeper.vault.ed25519;
+    final gBytes = ed.scalarMultBase(_oneScalar());
     return KeyImage.hashToPoint(gBytes);
+  }
+
+  static Uint8List _oneScalar() {
+    final b = Uint8List(32);
+    b[0] = 1;
+    return b;
   }
 }
