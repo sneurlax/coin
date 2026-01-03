@@ -3,6 +3,7 @@
 build/
 pubspec.lock
 *.g.dart
+!lib/src/crypto/native/secp256k1_ffi_bindings.g.dart
 doc/api/
 .idea/
 *.iml
