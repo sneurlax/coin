@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'witness_input.dart';
-import '../outpoint.dart';
 
 /// Script-path spend; witness = [...stack, script, controlBlock].
 class TaprootScriptInput extends WitnessInput {

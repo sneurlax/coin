@@ -1,5 +1,3 @@
-library coin_chains;
-
 export 'coin.dart';
 
 // Chain definitions

@@ -2,10 +2,9 @@ import 'dart:typed_data';
 import 'native_heap.dart';
 
 class HeapArrayWeb implements HeapArray {
-  final int _size;
   late final Uint8List _buffer;
 
-  HeapArrayWeb(this._size) : _buffer = Uint8List(_size);
+  HeapArrayWeb(int size) : _buffer = Uint8List(size);
 
   @override
   int get ptr => 0; // Would be WASM memory offset

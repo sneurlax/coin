@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'witness_input.dart';
-import '../outpoint.dart';
 import 'input_sig.dart';
 
 /// Key-path spend; witness = [schnorr_sig].

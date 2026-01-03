@@ -14,11 +14,6 @@ class PayToWitnessPubKey implements Locking {
     }
   }
 
-  static final _pattern = Script([
-    OpCode(Op.op0),
-    PushDataMatcher(20),
-  ]);
-
   static PayToWitnessPubKey? match(Script s) {
     if (s.ops.length != 2) return null;
     if (s.ops[0] is! OpCode || (s.ops[0] as OpCode).code != Op.op0) return null;

@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import '../abi/sol_function.dart';
 import '../abi/sol_parser.dart';
 import '../evm/evm_addr.dart';
 import 'call_builder.dart';

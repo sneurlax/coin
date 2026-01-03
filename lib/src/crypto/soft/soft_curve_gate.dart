@@ -166,7 +166,6 @@ class SoftCurveGate extends CurveGate {
       final alpha = (rx * rx * rx + BigInt.from(7)) % secp256k1P;
       final beta = alpha.modPow((secp256k1P + BigInt.one) >> 2, secp256k1P);
       if ((beta * beta - alpha) % secp256k1P != BigInt.zero) return false;
-      final y = beta.isEven ? beta : secp256k1P - beta;
 
       final eBytes = _taggedHash('BIP0340/challenge',
           Uint8List.fromList([

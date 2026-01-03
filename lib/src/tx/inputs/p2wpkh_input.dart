@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'witness_input.dart';
-import '../outpoint.dart';
 import 'input_sig.dart';
 
 /// witness = [sig, pubkey]

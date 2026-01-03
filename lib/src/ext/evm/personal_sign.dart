@@ -7,7 +7,7 @@ import '../../crypto/ecdsa_sig.dart';
 import '../../crypto/secret_key.dart';
 
 /// EIP-191 personal message signing.
-/// Prefixes with "\x19Ethereum Signed Message:\n<length>" before keccak256.
+/// Prefixes with "\x19Ethereum Signed Message:\n`<length>`" before keccak256.
 class PersonalSign {
   PersonalSign._();
 

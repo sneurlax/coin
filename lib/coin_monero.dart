@@ -1,5 +1,3 @@
-library coin_monero;
-
 export 'coin.dart';
 
 // Ed25519

@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import '../core/hex.dart';
 import '../hash/digest.dart';
 import 'vault_keeper.dart';
 import 'secret_key.dart';

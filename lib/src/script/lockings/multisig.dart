@@ -4,7 +4,7 @@ import '../operations.dart';
 import '../script.dart';
 import '../locking.dart';
 
-/// M-of-N multisig: OP_M <keys...> OP_N OP_CHECKMULTISIG
+/// M-of-N multisig: OP_M `<keys...>` OP_N OP_CHECKMULTISIG
 class MultiSig implements Locking {
   final int threshold;
   final List<Uint8List> publicKeys;

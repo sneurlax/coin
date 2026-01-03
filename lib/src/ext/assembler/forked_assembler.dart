@@ -1,8 +1,5 @@
 import '../../tx/inputs/tx_input.dart';
 import '../../tx/tx.dart';
-import '../../tx/tx_output.dart';
-import '../chains/chain_params.dart';
-import 'ordering.dart';
 import 'signing_callback.dart';
 import 'tx_assembler.dart';
 import '../forked_tx/forked_hasher.dart';

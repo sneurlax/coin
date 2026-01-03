@@ -1,7 +1,4 @@
-import 'dart:typed_data';
-
 import '../../crypto/secret_key.dart';
-import '../../crypto/public_key.dart';
 import '../../hash/digest.dart';
 import '../../addr/legacy_addr.dart';
 import '../../addr/segwit_addr.dart';

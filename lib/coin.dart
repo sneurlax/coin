@@ -1,5 +1,3 @@
-library coin;
-
 import 'src/crypto/vault_keeper.dart';
 
 // Core

@@ -1,5 +1,3 @@
-library coin_evm;
-
 export 'coin.dart';
 
 // RLP (needed for EVM serialization)
