@@ -1,6 +1,18 @@
 name: coin
 version: 0.1.0
-description: A cross-platform cryptocurrency toolkit with native secp256k1 support.
+description: >-
+  Cross-platform multi-coin cryptocurrency toolkit: Monero, Bitcoin, EVM.
+  BIP-32/39/44 HD keys, Schnorr/ECDSA signing, PSBT, BIP-47, MuSig2, ABI codec,
+  native secp256k1 FFI with pure-Dart fallback.
+
+repository: https://github.com/ManyMath/coin
+
+topics:
+  - cryptocurrency
+  - blockchain
+  - monero
+  - bitcoin
+  - ethereum
 
 environment:
   sdk: '>=3.2.0 <4.0.0'
